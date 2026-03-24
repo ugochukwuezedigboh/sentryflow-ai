@@ -1,8 +1,8 @@
-# 🛡️ SentryFlow AI
+# 🛡️ ENUGU CRIME REPORT AI
 ### Enugu State Crime Intelligence Platform
 
 > Anonymous, AI-powered crime reporting for all 17 LGAs of Enugu State, Nigeria.  
-> Built for the **3MTT Innovation Arena 2026** — Digital Inclusion pillar.
+> Built for the **3MTT NextGen Knowledge Showcase 2026** — Digital Inclusion pillar.
 
 ---
 
