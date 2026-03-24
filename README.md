@@ -1,4 +1,4 @@
-# 🛡️ ENUGU CRIME REPORT AI
+# 🛡️ SentryFlow AI
 ### Enugu State Crime Intelligence Platform
 
 > Anonymous, AI-powered crime reporting for all 17 LGAs of Enugu State, Nigeria.  
