@@ -8,8 +8,6 @@ Requirements:
 Run on laptop:
     python -m streamlit run sentryflow_ai.py
 
-Run for mobile access (same Wi-Fi):
-    python -m streamlit run sentryflow_ai.py --server.address 0.0.0.0 --server.port 8502
 """
 
 import streamlit as st
@@ -21,7 +19,6 @@ import random
 import datetime
 import io
 import base64
-import socket
 import os
 import pathlib
 import google.generativeai as genai
@@ -185,14 +182,16 @@ URGENCY_LABELS = {
     5: ("EXTREME",  "#dc2626"),
 }
 
-COLS = ["id", "timestamp", "category", "location", "lga", "urgency", "lat", "lng", "summary"]
+COLS = ["id", "timestamp", "category", "location", "lga", "urgency", "lat", "lng", "summary", "image_path"]
 
 # ─────────────────────────────────────────────
 # PERSISTENT STORAGE — saved on the host laptop
 # All reports from all devices are written here
 # ─────────────────────────────────────────────
 # Stored in same folder as this script
-DB_PATH = pathlib.Path(__file__).parent / "sentryflow_incidents.csv"
+DB_PATH    = pathlib.Path(__file__).parent / "sentryflow_incidents.csv"
+IMAGES_DIR = pathlib.Path(__file__).parent / "sentryflow_evidence"
+IMAGES_DIR.mkdir(exist_ok=True)   # Create folder on first run
 
 def load_incidents() -> pd.DataFrame:
     """Load all saved incidents from disk. Returns empty DataFrame if none yet."""
@@ -207,6 +206,7 @@ def load_incidents() -> pd.DataFrame:
             for col in COLS:
                 if col not in df.columns:
                     df[col] = ""
+            df["image_path"] = df["image_path"].fillna("")
             return df[COLS].reset_index(drop=True)
         except Exception:
             return pd.DataFrame(columns=COLS)
@@ -219,6 +219,23 @@ def save_incident(row: dict):
         new_row.to_csv(DB_PATH, mode="a", header=False, index=False)
     else:
         new_row.to_csv(DB_PATH, mode="w", header=True, index=False)
+
+def save_evidence_image(incident_id: str, img_bytes: bytes, filename: str) -> str:
+    """
+    Save evidence photo to the sentryflow_evidence folder.
+    Returns the relative file path, or empty string if no image.
+    """
+    if not img_bytes:
+        return ""
+    try:
+        ext = pathlib.Path(filename).suffix.lower() or ".jpg"
+        safe_ext = ext if ext in [".jpg",".jpeg",".png",".webp"] else ".jpg"
+        img_filename = f"{incident_id}{safe_ext}"
+        img_path     = IMAGES_DIR / img_filename
+        img_path.write_bytes(img_bytes)
+        return str(img_path)
+    except Exception:
+        return ""
 
 # ─────────────────────────────────────────────
 # CSS
@@ -306,37 +323,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
-# MOBILE ACCESS INFO
-# ─────────────────────────────────────────────
-def get_local_ip():
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
-        return "192.168.x.x"
-
-local_ip = get_local_ip()
-st.markdown(f"""
-<div style="background:#0a1a0a;border:1px solid #1a4a1a;border-radius:10px;
-            padding:.65rem 1.1rem;margin-bottom:1rem;
-            display:flex;align-items:center;flex-wrap:wrap;gap:.8rem;">
-  <span style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:#4ade80;">
-    📱 PHONE ACCESS:
-  </span>
-  <span style="font-family:'Share Tech Mono',monospace;font-size:.8rem;color:#86efac;
-               font-weight:700;background:#0d2a0d;padding:.2rem .65rem;
-               border-radius:6px;border:1px solid #2a5a2a;">
-    http://{local_ip}:8502
-  </span>
-  <span style="font-family:'Share Tech Mono',monospace;font-size:.65rem;color:#475569;">
-    (same Wi-Fi only)
-  </span>
-</div>
-""", unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
 # SESSION STATE
@@ -419,25 +405,26 @@ Report:
     data["urgency"]  = max(1, min(5, int(data["urgency"])))
     return data
 
-def add_incident(parsed: dict) -> tuple:
-    # Generate ID based on total saved incidents so IDs never repeat
+def add_incident(parsed: dict, img_bytes: bytes = None, img_filename: str = "") -> tuple:
+    """Save incident to CSV and optionally archive the evidence photo."""
     total_saved = len(load_incidents())
     new_id   = f"SF-{1000 + total_saved}"
     lat, lng = resolve_coords(parsed["location"], parsed["lga"])
+    # Save evidence image first so path is available for the CSV row
+    image_path = save_evidence_image(new_id, img_bytes, img_filename) if img_bytes else ""
     row = {
-        "id":        new_id,
-        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "category":  parsed["category"],
-        "location":  parsed["location"],
-        "lga":       parsed["lga"],
-        "urgency":   parsed["urgency"],
-        "lat":       lat,
-        "lng":       lng,
-        "summary":   parsed["summary"],
+        "id":         new_id,
+        "timestamp":  datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "category":   parsed["category"],
+        "location":   parsed["location"],
+        "lga":        parsed["lga"],
+        "urgency":    parsed["urgency"],
+        "lat":        lat,
+        "lng":        lng,
+        "summary":    parsed["summary"],
+        "image_path": image_path,
     }
-    # ── Save to disk FIRST so no report is ever lost ──────────────────────
     save_incident(row)
-    # ── Then reload all incidents from disk into session state ────────────
     st.session_state.incidents = load_incidents()
     return new_id, lat, lng
 
@@ -540,11 +527,12 @@ with tab_report:
         else:
             with st.spinner("🔍 AI is analysing your report — please wait..."):
                 try:
-                    img_bytes = uploaded_img.read() if uploaded_img else None
-                    parsed    = call_gemini(incident_text, img_bytes)
+                    img_bytes  = uploaded_img.read() if uploaded_img else None
+                    img_fname  = uploaded_img.name if uploaded_img else ""
+                    parsed     = call_gemini(incident_text, img_bytes)
                     if manual_lga != "Auto-detect":
                         parsed["lga"] = manual_lga
-                    new_id, lat, lng = add_incident(parsed)
+                    new_id, lat, lng = add_incident(parsed, img_bytes, img_fname)
                     st.session_state.last_result = {
                         **parsed, "id": new_id, "lat": lat, "lng": lng,
                     }
@@ -586,6 +574,12 @@ with tab_report:
             <tr><td style="color:#64748b;padding:.3rem 0;vertical-align:top;">Summary</td>
                 <td style="font-style:italic;color:#94a3b8;padding:.3rem 0;">
                   {r['summary']}</td></tr>
+            <tr><td style="color:#64748b;padding:.3rem 0;">Evidence</td>
+                <td style="padding:.3rem 0;">
+                  {'<span style="color:#4ade80;font-size:.85rem;">📸 Photo archived</span>'
+                   if r.get('image_path') else
+                   '<span style="color:#64748b;font-size:.85rem;">No photo attached</span>'}
+                </td></tr>
           </table>
         </div>""", unsafe_allow_html=True)
 
@@ -674,8 +668,7 @@ with tab_feed:
         st.markdown(
             f'<div style="font-family:\'Share Tech Mono\',monospace;font-size:.72rem;'
             f'color:#4ade80;padding:.4rem 0;">'
-            f'💾 {total} incident{"s" if total!=1 else ""} archived  ·  {db_kb} KB  ·  '
-            f'saved to: sentryflow_incidents.csv</div>',
+            f'💾 {total} incident{"s" if total!=1 else ""} archived  ·  {db_kb} KB  ·  '            f'CSV: sentryflow_incidents.csv  ·  '            f'Photos: sentryflow_evidence/ ({len(list(IMAGES_DIR.glob("*"))) if IMAGES_DIR.exists() else 0} files)</div>',
             unsafe_allow_html=True,
         )
 
@@ -689,7 +682,7 @@ with tab_feed:
     if not df_view.empty:
         st.dataframe(
             df_view[["id", "timestamp", "category", "location",
-                     "lga", "urgency", "summary"]]
+                     "lga", "urgency", "summary", "image_path"]]
             .sort_values("timestamp", ascending=False)
             .reset_index(drop=True),
             use_container_width=True,
@@ -701,12 +694,38 @@ with tab_feed:
                 "location":  st.column_config.TextColumn("Location", width="medium"),
                 "lga":       st.column_config.TextColumn("LGA",      width="small"),
                 "urgency":   st.column_config.NumberColumn("U", format="%d ⚡", width="small"),
-                "summary":   st.column_config.TextColumn("Summary",  width="large"),
+                "summary":    st.column_config.TextColumn("Summary",   width="large"),
+                "image_path": st.column_config.TextColumn("Evidence",  width="small"),
             },
         )
+        # ── Evidence Photo Gallery ────────────────────────────────────
+        photos_df = df_view[df_view["image_path"].str.strip() != ""]
+        if not photos_df.empty:
+            st.markdown("""
+            <div style="font-family:'Rajdhani',sans-serif;font-size:1.1rem;font-weight:700;
+                        color:#00d4ff;letter-spacing:.06em;margin-top:1.2rem;margin-bottom:.5rem;">
+                📸 EVIDENCE PHOTO ARCHIVE
+            </div>""", unsafe_allow_html=True)
+            num_cols = 3
+            rows = [photos_df.iloc[i:i+num_cols] for i in range(0, len(photos_df), num_cols)]
+            for row_df in rows:
+                cols = st.columns(num_cols)
+                for col_idx, (_, inc) in enumerate(row_df.iterrows()):
+                    img_path = pathlib.Path(inc["image_path"])
+                    if img_path.exists():
+                        with cols[col_idx]:
+                            st.image(str(img_path), use_column_width=True)
+                            caption = (
+                                f'<div style="font-family:monospace;font-size:.68rem;'
+                                f'color:#64748b;text-align:center;margin-top:.2rem;">'
+                                f'{inc["id"]} &nbsp;·&nbsp; {inc["category"]}<br>'
+                                f'{inc["timestamp"]}</div>'
+                            )
+                            st.markdown(caption, unsafe_allow_html=True)
+
         csv_b64 = base64.b64encode(df_view.to_csv(index=False).encode()).decode()
         st.markdown(
-            f'<a href="data:file/csv;base64,{csv_b64}" download="sentryflow_export.csv"'
+            f'<a href="data:file/csv;base64,{csv_b64}" download="sentryflow_export.csv"' 
             f' style="display:inline-block;margin-top:.8rem;color:#00d4ff;'
             f'font-family:\'Share Tech Mono\',monospace;font-size:.8rem;'
             f'border:1px solid #1e3a5f;border-radius:8px;padding:.45rem .9rem;'
