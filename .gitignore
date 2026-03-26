@@ -1,0 +1,38 @@
+# ─────────────────────────────────────────────
+# SentryFlow AI — .gitignore
+# ─────────────────────────────────────────────
+
+# API key — NEVER upload this
+.env
+.env.local
+.env.backup
+*.env
+
+# Incident archive — contains real crime data
+sentryflow_incidents.csv
+
+# Evidence photo archive — contains uploaded crime photos
+sentryflow_evidence/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor files
+.vscode/
+.idea/
+*.swp
