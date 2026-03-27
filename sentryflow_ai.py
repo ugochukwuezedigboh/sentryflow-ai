@@ -426,7 +426,7 @@ def add_incident(parsed: dict, img_bytes: bytes = None, img_filename: str = "") 
     }
     save_incident(row)
     st.session_state.incidents = load_incidents()
-    return new_id, lat, lng
+    return new_id, lat, lng, image_path
 
 # ─────────────────────────────────────────────
 # SIDEBAR
@@ -532,9 +532,13 @@ with tab_report:
                     parsed     = call_gemini(incident_text, img_bytes)
                     if manual_lga != "Auto-detect":
                         parsed["lga"] = manual_lga
-                    new_id, lat, lng = add_incident(parsed, img_bytes, img_fname)
+                    new_id, lat, lng, image_path = add_incident(parsed, img_bytes, img_fname)
                     st.session_state.last_result = {
-                        **parsed, "id": new_id, "lat": lat, "lng": lng,
+                        **parsed,
+                        "id":         new_id,
+                        "lat":        lat,
+                        "lng":        lng,
+                        "image_path": image_path,
                     }
                     st.rerun()
                 except json.JSONDecodeError:
