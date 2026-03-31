@@ -3,7 +3,7 @@ SentryFlow AI — Enugu State Crime Intelligence Platform
 Mobile-optimised | Google Gemini 2.0 Flash | All 17 LGAs
 
 Requirements:
-    pip install streamlit pandas google-generativeai folium pillow
+    pip install streamlit pandas google-generativeai folium pillow python-dotenv
 
 Run on laptop:
     python -m streamlit run sentryflow_ai.py
@@ -337,7 +337,7 @@ if not GEMINI_API_KEY:
         "**API key not found.** The app cannot classify reports without it.\n\n"
         "**Fix:** Open the `.env` file in your project folder and make sure it contains:\n\n"
         "`GEMINI_API_KEY=AIzaSyYourKeyHere`\n\n"
-        "Save the file and restart the app with START_SENTRYFLOW.bat"
+        "Save the file and restart the app."
     )
 if "last_result" not in st.session_state:
     st.session_state.last_result = None
@@ -559,5 +559,6 @@ with tab_report:
             ✅ REPORT {r['id']} SUCCESSFULLY FILED
           </div>
           <table style="width:100%;border-collapse:collapse;font-size:.92rem;color:#e2e8f0;">
-            <tr><td style="color:#64748b;padding:.3rem 0;width:100px;">Category</td>
-                <td style="font-weight:600;padding
+             <tr>
+              <td style="color:#64748b;padding:.3rem 0;width:100px;">Category</td>
+              <td style="font-weight:600;padding
