@@ -3,7 +3,7 @@ SentryFlow AI — Enugu State Crime Intelligence Platform
 Mobile-optimised | Google Gemini 2.0 Flash | All 17 LGAs
 
 Requirements:
-    pip install streamlit pandas google-generativeai folium pillow python-dotenv
+    pip install streamlit pandas google-generativeai folium pillow
 
 Run on laptop:
     python -m streamlit run sentryflow_ai.py
@@ -337,7 +337,7 @@ if not GEMINI_API_KEY:
         "**API key not found.** The app cannot classify reports without it.\n\n"
         "**Fix:** Open the `.env` file in your project folder and make sure it contains:\n\n"
         "`GEMINI_API_KEY=AIzaSyYourKeyHere`\n\n"
-        "Save the file and restart the app."
+        "Save the file and restart the app with START_SENTRYFLOW.bat"
     )
 if "last_result" not in st.session_state:
     st.session_state.last_result = None
@@ -516,7 +516,7 @@ with tab_report:
         key="photo_upload",
     )
     if uploaded_img:
-        st.image(uploaded_img, caption="Photo attached", use_container_width=True)
+        st.image(uploaded_img, caption="Photo attached", use_column_width=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     submit = st.button("🛡️  SUBMIT REPORT", type="primary")
@@ -546,56 +546,201 @@ with tab_report:
                     st.error(f"❌ Submission failed: {e}")
 
     # Confirmation card
-if st.session_state.last_result:
-    r = st.session_state.last_result
-    urg_label, urg_color = URGENCY_LABELS.get(r["urgency"], ("UNKNOWN", "#aaa"))
-    filled = "█" * r["urgency"]
-    empty  = "░" * (5 - r["urgency"])
-    st.markdown(f"""
-    <div style="background:#0d1b2a;border:1px solid #00d4ff;border-radius:14px;
-                padding:1.3rem;margin-top:1.2rem;">
-      <div style="font-family:'Rajdhani',sans-serif;font-size:1.2rem;font-weight:700;
-                  color:#00d4ff;margin-bottom:.9rem;letter-spacing:.06em;">
-        ✅ REPORT {r['id']} SUCCESSFULLY FILED
-      </div>
-      <table style="width:100%;border-collapse:collapse;font-size:.92rem;color:#e2e8f0;">
-         <tr>
-          <td style="color:#64748b;padding:.3rem 0;width:100px;">Category</td>
-          <td style="font-weight:600;padding:.3rem 0;">{r['category']}</td>
-         </tr>
-         <tr>
-          <td style="color:#64748b;padding:.3rem 0;">Location</td>
-          <td style="padding:.3rem 0;">{r['location']}</td>
-         </tr>
-         <tr>
-          <td style="color:#64748b;padding:.3rem 0;">LGA</td>
-          <td style="padding:.3rem 0;">{r['lga']}</td>
-         </tr>
-         <tr>
-          <td style="color:#64748b;padding:.3rem 0;">Urgency</td>
-          <td style="padding:.3rem 0;">
-            <span style="color:{urg_color};font-weight:700;
-                         font-family:'Share Tech Mono',monospace;">
-              {filled}{empty} {urg_label}
-            </span>
-          </td>
-         </tr>
-         <tr>
-          <td style="color:#64748b;padding:.3rem 0;vertical-align:top;">Summary</td>
-          <td style="font-style:italic;color:#94a3b8;padding:.3rem 0;">
-            {r['summary']}
-          </td>
-         </tr>
-         <tr>
-          <td style="color:#64748b;padding:.3rem 0;">Evidence</td>
-          <td style="padding:.3rem 0;">
-            {'📸 Photo archived' if r.get('image_path') else 'No photo attached'}
-          </td>
-         </tr>
-      </table>
-    </div>
-    """, unsafe_allow_html=True)
+    if st.session_state.last_result:
+        r = st.session_state.last_result
+        urg_label, urg_color = URGENCY_LABELS.get(r["urgency"], ("UNKNOWN", "#aaa"))
+        filled = "█" * r["urgency"]
+        empty  = "░" * (5 - r["urgency"])
+        st.markdown(f"""
+        <div style="background:#0d1b2a;border:1px solid #00d4ff;border-radius:14px;
+                    padding:1.3rem;margin-top:1.2rem;">
+          <div style="font-family:'Rajdhani',sans-serif;font-size:1.2rem;font-weight:700;
+                      color:#00d4ff;margin-bottom:.9rem;letter-spacing:.06em;">
+            ✅ REPORT {r['id']} SUCCESSFULLY FILED
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:.92rem;color:#e2e8f0;">
+            <tr><td style="color:#64748b;padding:.3rem 0;width:100px;">Category</td>
+                <td style="font-weight:600;padding:.3rem 0;">{r['category']}</td></tr>
+            <tr><td style="color:#64748b;padding:.3rem 0;">Location</td>
+                <td style="padding:.3rem 0;">{r['location']}</td></tr>
+            <tr><td style="color:#64748b;padding:.3rem 0;">LGA</td>
+                <td style="padding:.3rem 0;">{r['lga']}</td></tr>
+            <tr><td style="color:#64748b;padding:.3rem 0;">Urgency</td>
+                <td style="padding:.3rem 0;">
+                  <span style="color:{urg_color};font-weight:700;
+                               font-family:'Share Tech Mono',monospace;">
+                    {filled}{empty} {urg_label}
+                  </span></td></tr>
+            <tr><td style="color:#64748b;padding:.3rem 0;vertical-align:top;">Summary</td>
+                <td style="font-style:italic;color:#94a3b8;padding:.3rem 0;">
+                  {r['summary']}</td></tr>
+            <tr><td style="color:#64748b;padding:.3rem 0;">Evidence</td>
+                <td style="padding:.3rem 0;">
+                  {'<span style="color:#4ade80;font-size:.85rem;">📸 Photo archived</span>'
+                   if r.get('image_path') else
+                   '<span style="color:#64748b;font-size:.85rem;">No photo attached</span>'}
+                </td></tr>
+          </table>
+        </div>""", unsafe_allow_html=True)
 
-    if st.button("✖  Clear confirmation", key="clear_result"):
-        st.session_state.last_result = None
-        st.rerun()
+        if st.button("✖  Clear confirmation", key="clear_result"):
+            st.session_state.last_result = None
+            st.rerun()
+
+# ══════════════════════════════════════════════
+# TAB 2 — LIVE MAP
+# ══════════════════════════════════════════════
+with tab_map:
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Incidents",   len(df_view))
+    c2.metric("Critical ≥4", int((df_view["urgency"] >= 4).sum()) if not df_view.empty else 0)
+    c3.metric("LGAs Active", df_view["lga"].nunique() if not df_view.empty else 0)
+
+    fmap = folium.Map(
+        location=ENUGU_CENTER,
+        zoom_start=9,
+        tiles="OpenStreetMap",
+        prefer_canvas=True,
+    )
+
+    if not df_view.empty:
+        heat_data = [
+            [row["lat"], row["lng"], row["urgency"] / 5.0]
+            for _, row in df_view.iterrows()
+            if pd.notnull(row["lat"]) and pd.notnull(row["lng"])
+        ]
+        if heat_data:
+            HeatMap(
+                heat_data, radius=22, blur=18,
+                gradient={0.2: "#4ade80", 0.5: "#facc15",
+                          0.75: "#fb923c", 1.0: "#dc2626"},
+                min_opacity=0.4,
+            ).add_to(fmap)
+
+        for _, row in df_view.iterrows():
+            if pd.notnull(row["lat"]) and pd.notnull(row["lng"]):
+                _, color = URGENCY_LABELS.get(row["urgency"], ("?", "#aaa"))
+                folium.CircleMarker(
+                    location=[row["lat"], row["lng"]],
+                    radius=7, color=color, fill=True, fill_opacity=0.85,
+                    popup=folium.Popup(
+                        f"<b>{row['id']}</b><br>{row['category']}<br>"
+                        f"{row['location']}<br>LGA: {row['lga']}<br>"
+                        f"Urgency: {row['urgency']}/5<br>"
+                        f"<i style='color:#888'>{row['timestamp']}</i>",
+                        max_width=240,
+                    ),
+                    tooltip=f"{row['category']} | U:{row['urgency']}",
+                ).add_to(fmap)
+
+    # Render map inline — fixes blank map bug inside Streamlit tabs
+    components.html(fmap.get_root().render(), height=520, scrolling=False)
+
+    legend = "".join([
+        f'<span style="background:{c}22;border:1px solid {c};color:{c};'
+        f'border-radius:6px;padding:.2rem .65rem;font-size:.74rem;'
+        f'font-family:\'Share Tech Mono\',monospace;white-space:nowrap;">'
+        f'U{k} {v}</span>'
+        for k, (v, c) in URGENCY_LABELS.items()
+    ])
+    st.markdown(
+        f'<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.7rem;">'
+        f'{legend}</div>',
+        unsafe_allow_html=True,
+    )
+    if df_view.empty:
+        st.info("No incidents yet. Submit a report to see it on the map.")
+
+# ══════════════════════════════════════════════
+# TAB 3 — INCIDENT FEED
+# ══════════════════════════════════════════════
+with tab_feed:
+    # ── Refresh button — reloads latest data from disk ──────────────────
+    col_ref, col_info = st.columns([1, 3])
+    with col_ref:
+        if st.button("🔄  Refresh Feed", key="refresh_feed"):
+            st.session_state.incidents = load_incidents()
+            st.rerun()
+    with col_info:
+        db_size = DB_PATH.stat().st_size if DB_PATH.exists() else 0
+        db_kb   = round(db_size / 1024, 1)
+        total   = len(load_incidents())
+        st.markdown(
+            f'<div style="font-family:\'Share Tech Mono\',monospace;font-size:.72rem;'
+            f'color:#4ade80;padding:.4rem 0;">'
+            f'💾 {total} incident{"s" if total!=1 else ""} archived  ·  {db_kb} KB  ·  '            f'CSV: sentryflow_incidents.csv  ·  '            f'Photos: sentryflow_evidence/ ({len(list(IMAGES_DIR.glob("*"))) if IMAGES_DIR.exists() else 0} files)</div>',
+            unsafe_allow_html=True,
+        )
+
+    count = len(df_view)
+    st.markdown(
+        f'<div style="font-family:\'Share Tech Mono\',monospace;font-size:.8rem;'
+        f'color:#64748b;margin-bottom:.6rem;">'
+        f'{count} incident{"s" if count != 1 else ""} shown (filtered)</div>',
+        unsafe_allow_html=True,
+    )
+    if not df_view.empty:
+        st.dataframe(
+            df_view[["id", "timestamp", "category", "location",
+                     "lga", "urgency", "summary", "image_path"]]
+            .sort_values("timestamp", ascending=False)
+            .reset_index(drop=True),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "id":        st.column_config.TextColumn("ID",       width="small"),
+                "timestamp": st.column_config.TextColumn("Time",     width="medium"),
+                "category":  st.column_config.TextColumn("Category", width="medium"),
+                "location":  st.column_config.TextColumn("Location", width="medium"),
+                "lga":       st.column_config.TextColumn("LGA",      width="small"),
+                "urgency":   st.column_config.NumberColumn("U", format="%d ⚡", width="small"),
+                "summary":    st.column_config.TextColumn("Summary",   width="large"),
+                "image_path": st.column_config.TextColumn("Evidence",  width="small"),
+            },
+        )
+        # ── Evidence Photo Gallery ────────────────────────────────────
+        photos_df = df_view[df_view["image_path"].str.strip() != ""]
+        if not photos_df.empty:
+            st.markdown("""
+            <div style="font-family:'Rajdhani',sans-serif;font-size:1.1rem;font-weight:700;
+                        color:#00d4ff;letter-spacing:.06em;margin-top:1.2rem;margin-bottom:.5rem;">
+                📸 EVIDENCE PHOTO ARCHIVE
+            </div>""", unsafe_allow_html=True)
+            num_cols = 3
+            rows = [photos_df.iloc[i:i+num_cols] for i in range(0, len(photos_df), num_cols)]
+            for row_df in rows:
+                cols = st.columns(num_cols)
+                for col_idx, (_, inc) in enumerate(row_df.iterrows()):
+                    img_path = pathlib.Path(inc["image_path"])
+                    if img_path.exists():
+                        with cols[col_idx]:
+                            st.image(str(img_path), use_column_width=True)
+                            caption = (
+                                f'<div style="font-family:monospace;font-size:.68rem;'
+                                f'color:#64748b;text-align:center;margin-top:.2rem;">'
+                                f'{inc["id"]} &nbsp;·&nbsp; {inc["category"]}<br>'
+                                f'{inc["timestamp"]}</div>'
+                            )
+                            st.markdown(caption, unsafe_allow_html=True)
+
+        csv_b64 = base64.b64encode(df_view.to_csv(index=False).encode()).decode()
+        st.markdown(
+            f'<a href="data:file/csv;base64,{csv_b64}" download="sentryflow_export.csv"' 
+            f' style="display:inline-block;margin-top:.8rem;color:#00d4ff;'
+            f'font-family:\'Share Tech Mono\',monospace;font-size:.8rem;'
+            f'border:1px solid #1e3a5f;border-radius:8px;padding:.45rem .9rem;'
+            f'text-decoration:none;">⬇ Export as CSV</a>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.info("No incidents reported yet. Reports will appear here after submission.")
+
+# ─────────────────────────────────────────────
+# FOOTER
+# ─────────────────────────────────────────────
+st.markdown("""
+<br>
+<div style="text-align:center;font-family:'Share Tech Mono',monospace;
+            font-size:.65rem;color:#334155;letter-spacing:.1em;">
+    SENTRYFLOW AI · POWERED BY GEMINI 2.5 FLASH · ENUGU STATE NIGERIA · ALL 17 LGAs
+</div>""", unsafe_allow_html=True)
