@@ -546,19 +546,56 @@ with tab_report:
                     st.error(f"❌ Submission failed: {e}")
 
     # Confirmation card
-    if st.session_state.last_result:
-        r = st.session_state.last_result
-        urg_label, urg_color = URGENCY_LABELS.get(r["urgency"], ("UNKNOWN", "#aaa"))
-        filled = "█" * r["urgency"]
-        empty  = "░" * (5 - r["urgency"])
-        st.markdown(f"""
-        <div style="background:#0d1b2a;border:1px solid #00d4ff;border-radius:14px;
-                    padding:1.3rem;margin-top:1.2rem;">
-          <div style="font-family:'Rajdhani',sans-serif;font-size:1.2rem;font-weight:700;
-                      color:#00d4ff;margin-bottom:.9rem;letter-spacing:.06em;">
-            ✅ REPORT {r['id']} SUCCESSFULLY FILED
-          </div>
-          <table style="width:100%;border-collapse:collapse;font-size:.92rem;color:#e2e8f0;">
-             <tr>
-              <td style="color:#64748b;padding:.3rem 0;width:100px;">Category</td>
-              <td style="font-weight:600;padding
+if st.session_state.last_result:
+    r = st.session_state.last_result
+    urg_label, urg_color = URGENCY_LABELS.get(r["urgency"], ("UNKNOWN", "#aaa"))
+    filled = "█" * r["urgency"]
+    empty  = "░" * (5 - r["urgency"])
+    st.markdown(f"""
+    <div style="background:#0d1b2a;border:1px solid #00d4ff;border-radius:14px;
+                padding:1.3rem;margin-top:1.2rem;">
+      <div style="font-family:'Rajdhani',sans-serif;font-size:1.2rem;font-weight:700;
+                  color:#00d4ff;margin-bottom:.9rem;letter-spacing:.06em;">
+        ✅ REPORT {r['id']} SUCCESSFULLY FILED
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:.92rem;color:#e2e8f0;">
+         <tr>
+          <td style="color:#64748b;padding:.3rem 0;width:100px;">Category</td>
+          <td style="font-weight:600;padding:.3rem 0;">{r['category']}</td>
+         </tr>
+         <tr>
+          <td style="color:#64748b;padding:.3rem 0;">Location</td>
+          <td style="padding:.3rem 0;">{r['location']}</td>
+         </tr>
+         <tr>
+          <td style="color:#64748b;padding:.3rem 0;">LGA</td>
+          <td style="padding:.3rem 0;">{r['lga']}</td>
+         </tr>
+         <tr>
+          <td style="color:#64748b;padding:.3rem 0;">Urgency</td>
+          <td style="padding:.3rem 0;">
+            <span style="color:{urg_color};font-weight:700;
+                         font-family:'Share Tech Mono',monospace;">
+              {filled}{empty} {urg_label}
+            </span>
+          </td>
+         </tr>
+         <tr>
+          <td style="color:#64748b;padding:.3rem 0;vertical-align:top;">Summary</td>
+          <td style="font-style:italic;color:#94a3b8;padding:.3rem 0;">
+            {r['summary']}
+          </td>
+         </tr>
+         <tr>
+          <td style="color:#64748b;padding:.3rem 0;">Evidence</td>
+          <td style="padding:.3rem 0;">
+            {'📸 Photo archived' if r.get('image_path') else 'No photo attached'}
+          </td>
+         </tr>
+      </table>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if st.button("✖  Clear confirmation", key="clear_result"):
+        st.session_state.last_result = None
+        st.rerun()
