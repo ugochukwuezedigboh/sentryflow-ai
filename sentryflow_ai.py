@@ -559,6 +559,5 @@ with tab_report:
             ✅ REPORT {r['id']} SUCCESSFULLY FILED
           </div>
           <table style="width:100%;border-collapse:collapse;font-size:.92rem;color:#e2e8f0;">
-             <tr><td style="color:#64748b;padding:.3rem 0;width:100px;">Category</td>
-                <td style="font-weight:600;padding:.3rem 0;">{r['category']}</td></tr>
-             <tr><td style="color
+            <tr><td style="color:#64748b;padding:.3rem 0;width:100px;">Category</td>
+                <td style="font-weight:600;padding
