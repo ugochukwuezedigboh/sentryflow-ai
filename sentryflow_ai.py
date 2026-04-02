@@ -185,13 +185,29 @@ URGENCY_LABELS = {
 COLS = ["id", "timestamp", "category", "location", "lga", "urgency", "lat", "lng", "summary", "image_path"]
 
 # ─────────────────────────────────────────────
-# PERSISTENT STORAGE — saved on the host laptop
-# All reports from all devices are written here
+# PERSISTENT STORAGE — smart path detection
+# On Streamlit Cloud the script folder is READ-ONLY — only /tmp is writable.
+# On your local laptop the script folder IS writable — data stays permanently.
 # ─────────────────────────────────────────────
-# Stored in same folder as this script
-DB_PATH    = pathlib.Path(__file__).parent / "sentryflow_incidents.csv"
-IMAGES_DIR = pathlib.Path(__file__).parent / "sentryflow_evidence"
-IMAGES_DIR.mkdir(exist_ok=True)   # Create folder on first run
+def _get_storage_root() -> pathlib.Path:
+    """
+    Test whether the script directory is writable.
+    - Local laptop  → returns script folder (permanent storage)
+    - Streamlit Cloud → returns /tmp (session storage — export CSV to keep data)
+    """
+    script_dir = pathlib.Path(__file__).parent
+    test_file  = script_dir / ".write_test"
+    try:
+        test_file.write_text("ok")
+        test_file.unlink()
+        return script_dir
+    except OSError:
+        return pathlib.Path("/tmp")
+
+STORAGE_ROOT = _get_storage_root()
+DB_PATH      = STORAGE_ROOT / "sentryflow_incidents.csv"
+IMAGES_DIR   = STORAGE_ROOT / "sentryflow_evidence"
+IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
 def load_incidents() -> pd.DataFrame:
     """Load all saved incidents from disk. Returns empty DataFrame if none yet."""
@@ -426,7 +442,7 @@ def add_incident(parsed: dict, img_bytes: bytes = None, img_filename: str = "") 
     }
     save_incident(row)
     st.session_state.incidents = load_incidents()
-    return new_id, lat, lng
+    return new_id, lat, lng, image_path
 
 # ─────────────────────────────────────────────
 # SIDEBAR
@@ -532,9 +548,13 @@ with tab_report:
                     parsed     = call_gemini(incident_text, img_bytes)
                     if manual_lga != "Auto-detect":
                         parsed["lga"] = manual_lga
-                    new_id, lat, lng = add_incident(parsed, img_bytes, img_fname)
+                    new_id, lat, lng, image_path = add_incident(parsed, img_bytes, img_fname)
                     st.session_state.last_result = {
-                        **parsed, "id": new_id, "lat": lat, "lng": lng,
+                        **parsed,
+                        "id":         new_id,
+                        "lat":        lat,
+                        "lng":        lng,
+                        "image_path": image_path,
                     }
                     st.rerun()
                 except json.JSONDecodeError:
@@ -662,14 +682,26 @@ with tab_feed:
             st.session_state.incidents = load_incidents()
             st.rerun()
     with col_info:
-        db_size = DB_PATH.stat().st_size if DB_PATH.exists() else 0
-        db_kb   = round(db_size / 1024, 1)
-        total   = len(load_incidents())
+        db_size   = DB_PATH.stat().st_size if DB_PATH.exists() else 0
+        db_kb     = round(db_size / 1024, 1)
+        total     = len(load_incidents())
+        img_count = len(list(IMAGES_DIR.glob("*"))) if IMAGES_DIR.exists() else 0
+        is_cloud  = str(STORAGE_ROOT).startswith("/tmp")
         st.markdown(
             f'<div style="font-family:\'Share Tech Mono\',monospace;font-size:.72rem;'
             f'color:#4ade80;padding:.4rem 0;">'
-            f'💾 {total} incident{"s" if total!=1 else ""} archived  ·  {db_kb} KB  ·  '            f'CSV: sentryflow_incidents.csv  ·  '            f'Photos: sentryflow_evidence/ ({len(list(IMAGES_DIR.glob("*"))) if IMAGES_DIR.exists() else 0} files)</div>',
+            f'💾 {total} incident{"s" if total!=1 else ""} archived  ·  '
+            f'{db_kb} KB  ·  📸 {img_count} photo{"s" if img_count!=1 else ""}  ·  '
+            f'{"☁️ cloud session (/tmp)" if is_cloud else "🖥️ saved on laptop (permanent)"}'
+            f'</div>',
             unsafe_allow_html=True,
+        )
+
+    if str(STORAGE_ROOT).startswith("/tmp"):
+        st.warning(
+            "⚠️ **Cloud storage active.** Reports are saved to `/tmp` for this session. "
+            "Data will reset if the app restarts or sleeps. "
+            "**Download your CSV regularly** using the button below."
         )
 
     count = len(df_view)
@@ -723,15 +755,26 @@ with tab_feed:
                             )
                             st.markdown(caption, unsafe_allow_html=True)
 
-        csv_b64 = base64.b64encode(df_view.to_csv(index=False).encode()).decode()
-        st.markdown(
-            f'<a href="data:file/csv;base64,{csv_b64}" download="sentryflow_export.csv"' 
-            f' style="display:inline-block;margin-top:.8rem;color:#00d4ff;'
-            f'font-family:\'Share Tech Mono\',monospace;font-size:.8rem;'
-            f'border:1px solid #1e3a5f;border-radius:8px;padding:.45rem .9rem;'
-            f'text-decoration:none;">⬇ Export as CSV</a>',
-            unsafe_allow_html=True,
-        )
+        # ── Download buttons — work on Streamlit Cloud and local ─────────
+        full_df = load_incidents()
+        col_dl1, col_dl2 = st.columns(2)
+        with col_dl1:
+            st.download_button(
+                label="⬇  Download Full Archive (CSV)",
+                data=full_df.to_csv(index=False).encode("utf-8"),
+                file_name="sentryflow_incidents.csv",
+                mime="text/csv",
+                key="csv_full_download",
+            )
+        with col_dl2:
+            if len(df_view) != len(full_df):
+                st.download_button(
+                    label="⬇  Download Filtered View (CSV)",
+                    data=df_view.to_csv(index=False).encode("utf-8"),
+                    file_name="sentryflow_filtered.csv",
+                    mime="text/csv",
+                    key="csv_filtered_download",
+                )
     else:
         st.info("No incidents reported yet. Reports will appear here after submission.")
 
