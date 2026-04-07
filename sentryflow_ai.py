@@ -185,6 +185,28 @@ URGENCY_LABELS = {
 COLS = ["id", "timestamp", "category", "location", "lga", "urgency", "lat", "lng", "summary", "image_path"]
 
 # ─────────────────────────────────────────────
+# RAPID RESPONSE ALERT SYSTEM
+# Automatically notifies security agencies when
+# a critical or extreme incident is reported.
+# Premium feature — subscribe to activate full
+# Twilio voice call integration.
+# ─────────────────────────────────────────────
+ALERT_CONFIG = {
+    # Urgency threshold to trigger an alert (4=CRITICAL, 5=EXTREME)
+    "trigger_urgency":  4,
+    # Demo security hotline — replace with official number in production
+    "security_hotline": "+2348037817755",
+    # Categories that ALWAYS trigger an alert regardless of urgency
+    "always_alert_categories": {"Kidnapping"},
+    # Premium feature flag — set True when Twilio is configured
+    "twilio_enabled": False,
+    # Twilio credentials (set in .env / Streamlit secrets for production)
+    "twilio_sid":    "",
+    "twilio_token":  "",
+    "twilio_from":   "",
+}
+
+# ─────────────────────────────────────────────
 # PERSISTENT STORAGE — smart path detection
 # On Streamlit Cloud the script folder is READ-ONLY — only /tmp is writable.
 # On your local laptop the script folder IS writable — data stays permanently.
@@ -421,6 +443,86 @@ Report:
     data["urgency"]  = max(1, min(5, int(data["urgency"])))
     return data
 
+def _should_alert(urgency: int, category: str) -> bool:
+    """Return True if this incident meets the alert threshold."""
+    if category in ALERT_CONFIG["always_alert_categories"]:
+        return True
+    return urgency >= ALERT_CONFIG["trigger_urgency"]
+
+def _build_alert_message(incident_id: str, category: str, location: str,
+                          lga: str, urgency: int, summary: str) -> str:
+    """Build the voice/SMS alert message sent to the security hotline."""
+    level = URGENCY_LABELS.get(urgency, (str(urgency), "#aaa"))[0]
+    return (
+        f"SENTRYFLOW AI ALERT. "
+        f"Incident ID {incident_id}. "
+        f"Category: {category}. "
+        f"Location: {location}, {lga} LGA. "
+        f"Urgency level {urgency} — {level}. "
+        f"Summary: {summary}. "
+        f"Please respond immediately."
+    )
+
+def trigger_alert(incident_id: str, category: str, location: str,
+                  lga: str, urgency: int, summary: str) -> dict:
+    """
+    Trigger a rapid response alert to the security hotline.
+
+    PREMIUM SERVICE — three modes:
+      1. Twilio enabled  → real automated voice call to security hotline
+      2. Twilio disabled → in-app alert shown + manual call prompt displayed
+      3. Always          → incident flagged in session_state for UI display
+
+    To enable real calls: add Twilio credentials to .env or Streamlit secrets:
+        TWILIO_SID=ACxxxxx
+        TWILIO_TOKEN=xxxxx
+        TWILIO_FROM=+1234567890
+    """
+    message = _build_alert_message(incident_id, category, location, lga, urgency, summary)
+    hotline = ALERT_CONFIG["security_hotline"]
+    result  = {
+        "triggered":  True,
+        "incident_id": incident_id,
+        "hotline":    hotline,
+        "message":    message,
+        "method":     "in-app",
+        "success":    False,
+        "error":      None,
+    }
+
+    # ── Try Twilio voice call (premium) ──────────────────────────────────
+    if ALERT_CONFIG["twilio_enabled"]:
+        try:
+            from twilio.rest import Client as TwilioClient
+            sid   = os.getenv("TWILIO_SID",   ALERT_CONFIG["twilio_sid"])
+            token = os.getenv("TWILIO_TOKEN", ALERT_CONFIG["twilio_token"])
+            frm   = os.getenv("TWILIO_FROM",  ALERT_CONFIG["twilio_from"])
+            if sid and token and frm:
+                client = TwilioClient(sid, token)
+                twiml  = (
+                    f"<Response>"
+                    f"<Say voice='alice' loop='2'>{message}</Say>"
+                    f"</Response>"
+                )
+                call = client.calls.create(
+                    twiml=twiml, to=hotline, from_=frm
+                )
+                result["method"]  = "twilio_voice_call"
+                result["success"] = True
+                result["call_sid"]= call.sid
+        except Exception as e:
+            result["error"] = str(e)
+    else:
+        # In-app alert mode — show prominent UI banner
+        result["method"]  = "in-app"
+        result["success"] = True
+
+    # Store in session for UI display
+    if "alerts" not in st.session_state:
+        st.session_state.alerts = []
+    st.session_state.alerts.append(result)
+    return result
+
 def add_incident(parsed: dict, img_bytes: bytes = None, img_filename: str = "") -> tuple:
     """Save incident to CSV and optionally archive the evidence photo."""
     total_saved = len(load_incidents())
@@ -442,6 +544,18 @@ def add_incident(parsed: dict, img_bytes: bytes = None, img_filename: str = "") 
     }
     save_incident(row)
     st.session_state.incidents = load_incidents()
+
+    # ── Rapid response alert ──────────────────────────────────────────────
+    if _should_alert(parsed["urgency"], parsed["category"]):
+        trigger_alert(
+            incident_id = new_id,
+            category    = parsed["category"],
+            location    = parsed["location"],
+            lga         = parsed["lga"],
+            urgency     = parsed["urgency"],
+            summary     = parsed["summary"],
+        )
+
     return new_id, lat, lng, image_path
 
 # ─────────────────────────────────────────────
@@ -602,6 +716,57 @@ with tab_report:
                 </td></tr>
           </table>
         </div>""", unsafe_allow_html=True)
+
+        # ── Rapid Response Alert Banner ──────────────────────────────────
+        alerts = st.session_state.get("alerts", [])
+        matching = [a for a in alerts if a.get("incident_id") == r.get("id")]
+        if matching:
+            alert = matching[-1]
+            hotline = alert["hotline"]
+            method  = alert["method"]
+            if method == "twilio_voice_call" and alert["success"]:
+                st.markdown(f"""
+                <div style="background:#052e16;border:1px solid #4ade80;border-radius:10px;
+                            padding:1rem 1.2rem;margin-top:.8rem;">
+                  <div style="font-family:'Rajdhani',sans-serif;font-size:1.05rem;
+                              font-weight:700;color:#4ade80;margin-bottom:.4rem;">
+                    📞 AUTOMATED CALL DISPATCHED
+                  </div>
+                  <div style="font-size:.88rem;color:#86efac;">
+                    Security hotline <b>{hotline}</b> has been called automatically.<br>
+                    Officers have been notified of this {r['category']} incident.
+                  </div>
+                </div>""", unsafe_allow_html=True)
+            else:
+                # In-app alert — show call prompt
+                urg = r.get("urgency", 3)
+                if urg >= 5:
+                    alert_bg, alert_br, alert_title, alert_color = "#2d0000","#dc2626","🚨 EXTREME EMERGENCY — CALL NOW","#fca5a5"
+                elif urg >= 4:
+                    alert_bg, alert_br, alert_title, alert_color = "#1c1000","#f97316","⚠️ CRITICAL INCIDENT — ALERT SECURITY","#fdba74"
+                else:
+                    alert_bg, alert_br, alert_title, alert_color = "#0d1b2a","#facc15","📋 INCIDENT FLAGGED","#fde68a"
+                st.markdown(f"""
+                <div style="background:{alert_bg};border:2px solid {alert_br};
+                            border-radius:10px;padding:1rem 1.2rem;margin-top:.8rem;">
+                  <div style="font-family:'Rajdhani',sans-serif;font-size:1.1rem;
+                              font-weight:700;color:{alert_color};margin-bottom:.5rem;
+                              letter-spacing:.05em;">
+                    {alert_title}
+                  </div>
+                  <div style="font-size:.88rem;color:{alert_color};margin-bottom:.6rem;">
+                    This incident meets the rapid response threshold.
+                    Security agencies must be notified immediately.
+                  </div>
+                  <div style="font-family:'Share Tech Mono',monospace;font-size:.92rem;
+                              color:#ffffff;font-weight:700;">
+                    📞 Security Hotline: {hotline}
+                  </div>
+                  <div style="font-size:.78rem;color:#64748b;margin-top:.5rem;">
+                    🔒 Upgrade to SentryFlow AI Premium to enable automated voice calls
+                    so security agencies are contacted instantly without manual action.
+                  </div>
+                </div>""", unsafe_allow_html=True)
 
         if st.button("✖  Clear confirmation", key="clear_result"):
             st.session_state.last_result = None
